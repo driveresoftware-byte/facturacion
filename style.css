@@ -676,3 +676,124 @@ textarea:focus { border-color: var(--accent); }
 @media (max-width: 768px) {
     .envio-config { grid-template-columns: 1fr; }
 }
+
+/* ── Whapi status badge ── */
+.whapi-badge {
+    font-size: 13px;
+    padding: 7px 14px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--bg3);
+    color: var(--text2);
+}
+.whapi-badge.ok    { border-color: var(--verde); color: var(--verde); background: rgba(16,185,129,0.08); }
+.whapi-badge.error { border-color: var(--rojo);  color: var(--rojo);  background: rgba(239,68,68,0.08); }
+
+/* ══ PLANES ══ */
+.planes-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 16px;
+}
+
+.plan-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: border-color 0.15s;
+    position: relative;
+}
+.plan-card:hover { border-color: var(--accent); }
+.plan-card.inactivo { opacity: .5; }
+
+.plan-precio {
+    font-family: 'Syne', sans-serif;
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--accent);
+}
+
+.plan-nombre {
+    font-family: 'Syne', sans-serif;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.plan-velocidad {
+    font-size: 12px;
+    color: var(--verde);
+    background: rgba(16,185,129,0.1);
+    padding: 3px 10px;
+    border-radius: 20px;
+    display: inline-block;
+    width: fit-content;
+}
+
+.plan-desc {
+    font-size: 13px;
+    color: var(--text2);
+    line-height: 1.5;
+}
+
+.plan-clientes {
+    font-size: 12px;
+    color: var(--text2);
+    margin-top: 4px;
+}
+
+.plan-acciones {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.plan-badge-inactivo {
+    position: absolute;
+    top: 14px; right: 14px;
+    font-size: 10px;
+    background: rgba(239,68,68,0.15);
+    color: var(--rojo);
+    padding: 2px 8px;
+    border-radius: 10px;
+}
+
+/* ══ BALANCE / GRÁFICAS ══ */
+.graficas-grid {
+    display: grid;
+    grid-template-columns: 1fr 1.6fr;
+    gap: 20px;
+}
+
+.grafica-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+}
+
+.grafica-card h3 {
+    font-family: 'Syne', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    margin-bottom: 20px;
+}
+
+.chart-wrap {
+    position: relative;
+    max-height: 260px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+@media (max-width: 768px) {
+    .graficas-grid { grid-template-columns: 1fr; }
+    .planes-grid   { grid-template-columns: 1fr 1fr; }
+}
