@@ -75,7 +75,7 @@ function mostrarSeccion(nombre, el) {
     if (nombre==='clientes')  listarClientes();
     if (nombre==='planes')    cargarPlanes();
     if (nombre==='pagos')     { poblarSelectorMes('filtroPagoMes'); cargarPagos(); }
-    if (nombre==='balance')   { poblarSelectorMes('filtroBalanceMes'); cargarBalance(); }
+    if (nombre==='gastos')    cargarGastos();
     if (nombre==='envio')     iniciarSeccionEnvio();
 }
 
@@ -841,11 +841,344 @@ function enviarWhatsApp() {
 }
 
 // ═══════════════════════════════════════════════
-// INIT
+// GASTOS / CAJA MENOR
 // ═══════════════════════════════════════════════
-document.addEventListener('DOMContentLoaded', async () => {
-    document.getElementById('fechaHoy').textContent = formatFecha(new Date().toISOString().split('T')[0]);
-    await listarClientes();
-    await cargarPlanes();
-    cargarDashboard();
-});
+let gastoActualQR   = null;
+let qrPollingTimer  = null;
+let qrChart         = null;
+
+// URL base donde está alojado el sistema (ajusta según tu hosting)
+// Si abres el HTML directo en el navegador usa: window.location.origin + window.location.pathname.replace('index.html','')
+const BASE_URL = window.location.origin + window.location.pathname.replace(/index\.html.*$/, '');
+
+function generarToken() {
+    return 'gasto_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
+}
+
+async function cargarGastos() {
+    const mes = mesActual();
+    const [y, m] = mes.split('-');
+    const inicio = `${y}-${m}-01`;
+    const fin    = new Date(+y, +m, 0).toISOString().split('T')[0];
+
+    const { data, error } = await client.from('gastos')
+        .select('*')
+        .gte('fecha', inicio)
+        .lte('fecha', fin)
+        .order('created_at', { ascending: false });
+
+    if (error) { console.error(error); return; }
+
+    const gastos      = data || [];
+    const totalGast   = gastos.filter(g => g.estado !== 'anulado').reduce((s, g) => s + Number(g.valor || 0), 0);
+    const pendientes  = gastos.filter(g => g.estado === 'pendiente_firma').length;
+    const firmados    = gastos.filter(g => g.estado === 'firmado').length;
+
+    document.getElementById('gastosTotal').textContent    = '$' + totalGast.toLocaleString('es-CO');
+    document.getElementById('gastosPendientes').textContent = pendientes;
+    document.getElementById('gastosFirmados').textContent   = firmados;
+
+    const tbody = document.getElementById('tablaGastos');
+    if (!gastos.length) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text2)">No hay gastos este mes</td></tr>';
+        return;
+    }
+
+    const colorCat = {
+        mantenimiento: '#3b82f6', materiales: '#8b5cf6', transporte: '#f59e0b',
+        servicios: '#06b6d4', nomina: '#10b981', arriendo: '#ef4444', otros: '#94a3b8'
+    };
+
+    tbody.innerHTML = gastos.map(g => {
+        const color  = colorCat[g.categoria] || '#94a3b8';
+        const badge  = g.estado === 'firmado'
+            ? `<span class="badge badge-pagado">Firmado ✓</span>`
+            : g.estado === 'anulado'
+                ? `<span class="badge badge-suspendido">Anulado</span>`
+                : `<span class="badge" style="background:rgba(245,158,11,.15);color:var(--amarillo)">Pendiente firma</span>`;
+
+        return `<tr>
+            <td>
+                <div style="font-weight:500">${g.concepto}</div>
+                ${g.descripcion ? `<div style="font-size:11px;color:var(--text2)">${g.descripcion}</div>` : ''}
+            </td>
+            <td><span style="font-size:11px;padding:3px 8px;border-radius:20px;background:${color}22;color:${color};font-weight:600">${g.categoria}</span></td>
+            <td style="font-weight:600;color:var(--rojo)">$${Number(g.valor || 0).toLocaleString('es-CO')}</td>
+            <td style="font-size:13px">${g.responsable}</td>
+            <td style="font-size:13px;color:var(--text2)">${g.entregado_por}</td>
+            <td style="font-size:12px">${formatFecha(g.fecha)}</td>
+            <td>${badge}</td>
+            <td>
+                <div class="acciones">
+                    ${g.estado === 'pendiente_firma'
+                        ? `<button class="btn-accion editar" onclick="mostrarQR(${g.id})">Ver QR</button>`
+                        : ''
+                    }
+                    ${g.estado === 'firmado'
+                        ? `<button class="btn-accion factura" onclick="descargarPDFGastoId(${g.id})">PDF</button>`
+                        : ''
+                    }
+                    ${g.estado !== 'anulado'
+                        ? `<button class="btn-accion borrar" onclick="anularGasto(${g.id})">Anular</button>`
+                        : ''
+                    }
+                </div>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+// ── Modal nuevo gasto ──────────────────────────
+async function abrirModalGasto() {
+    document.getElementById('gastoId').value         = '';
+    document.getElementById('gastoConcepto').value   = '';
+    document.getElementById('gastoValor').value      = '';
+    document.getElementById('gastoFecha').value      = new Date().toISOString().split('T')[0];
+    document.getElementById('gastoResponsable').value= '';
+    document.getElementById('gastoEntregadoPor').value = '';
+    document.getElementById('gastoDesc').value       = '';
+    document.getElementById('gastoCategoria').value  = 'mantenimiento';
+    document.getElementById('tituloGasto').textContent = 'Nuevo Gasto';
+
+    // Sugerir cobradores previos
+    const { data } = await client.from('pagos').select('cobrador').not('cobrador', 'is', null).limit(50);
+    const unicos = [...new Set((data || []).map(p => p.cobrador).filter(Boolean))];
+    document.getElementById('listaCobradoresG').innerHTML = unicos.map(c => `<option value="${c}">`).join('');
+
+    document.getElementById('modalGasto').classList.remove('oculto');
+}
+
+function cerrarModalGasto() {
+    document.getElementById('modalGasto').classList.add('oculto');
+}
+
+async function guardarGasto() {
+    const concepto     = document.getElementById('gastoConcepto').value.trim();
+    const valor        = parseFloat(document.getElementById('gastoValor').value) || 0;
+    const fecha        = document.getElementById('gastoFecha').value;
+    const responsable  = document.getElementById('gastoResponsable').value.trim();
+    const entregadoPor = document.getElementById('gastoEntregadoPor').value.trim();
+    const descripcion  = document.getElementById('gastoDesc').value.trim();
+    const categoria    = document.getElementById('gastoCategoria').value;
+
+    if (!concepto)     { toast('Ingresa el concepto', 'error'); return; }
+    if (!valor)        { toast('Ingresa el valor', 'error'); return; }
+    if (!responsable)  { toast('Ingresa quien recibe', 'error'); return; }
+    if (!entregadoPor) { toast('Ingresa quien entrega', 'error'); return; }
+    if (!fecha)        { toast('Ingresa la fecha', 'error'); return; }
+
+    const token = generarToken();
+
+    const { data, error } = await client.from('gastos').insert([{
+        concepto, categoria, valor, fecha,
+        responsable, entregado_por: entregadoPor,
+        descripcion, token, estado: 'pendiente_firma'
+    }]).select().single();
+
+    if (error) { toast('Error guardando gasto', 'error'); console.error(error); return; }
+
+    toast('Gasto creado ✓ — genera el QR para firmar', 'exito');
+    cerrarModalGasto();
+    cargarGastos();
+    mostrarQRData(data);
+}
+
+// ── Modal QR ────────────────────────────────────
+async function mostrarQR(gastoId) {
+    const { data, error } = await client.from('gastos').select('*').eq('id', gastoId).single();
+    if (error || !data) { toast('Error cargando gasto', 'error'); return; }
+    mostrarQRData(data);
+}
+
+function mostrarQRData(gasto) {
+    gastoActualQR = gasto;
+    document.getElementById('qrResponsable').textContent = gasto.responsable;
+    document.getElementById('qrEstado').className  = 'qr-estado-pendiente';
+    document.getElementById('qrEstado').textContent = '⏳ Esperando firma...';
+    document.getElementById('btnDescargarPDFGasto').classList.add('oculto');
+    document.getElementById('modalQR').classList.remove('oculto');
+
+    // Generar QR en el canvas usando qrcode.js
+    const firmaURL = `${BASE_URL}firma.html?token=${gasto.token}`;
+    const canvas   = document.getElementById('canvasQR');
+    canvas.width   = 0; canvas.height = 0; // limpiar
+
+    new QRCode(document.getElementById('qrContainer'), {
+        text:          firmaURL,
+        width:         220,
+        height:        220,
+        colorDark:     '#000000',
+        colorLight:    '#ffffff',
+        correctLevel:  QRCode.CorrectLevel.H
+    });
+
+    iniciarPolling(gasto.token);
+}
+
+function cerrarModalQR() {
+    document.getElementById('modalQR').classList.add('oculto');
+    document.getElementById('qrContainer').innerHTML =
+        '<canvas id="canvasQR" style="border-radius:12px;background:#fff;padding:12px"></canvas>';
+    detenerPolling();
+    gastoActualQR = null;
+}
+
+// ── Polling: verificar si ya se firmó ───────────
+function iniciarPolling(token) {
+    detenerPolling();
+    qrPollingTimer = setInterval(async () => {
+        const { data } = await client.from('gastos').select('estado,firma_data,firma_fecha').eq('token', token).single();
+        if (data?.estado === 'firmado') {
+            detenerPolling();
+            gastoActualQR = { ...gastoActualQR, ...data };
+            document.getElementById('qrEstado').className  = 'qr-estado-firmado';
+            document.getElementById('qrEstado').textContent = '✅ ¡Firmado! Ya puedes descargar el PDF.';
+            document.getElementById('btnDescargarPDFGasto').classList.remove('oculto');
+            toast('Recibo firmado ✓ — PDF disponible', 'exito');
+        }
+    }, 2500); // revisar cada 2.5 segundos
+}
+
+function detenerPolling() {
+    if (qrPollingTimer) { clearInterval(qrPollingTimer); qrPollingTimer = null; }
+}
+
+// ── Anular gasto ────────────────────────────────
+async function anularGasto(id) {
+    if (!confirm('¿Anular este gasto?')) return;
+    const { error } = await client.from('gastos').update({ estado: 'anulado' }).eq('id', id);
+    if (error) { toast('Error anulando', 'error'); return; }
+    toast('Gasto anulado', 'exito');
+    cargarGastos();
+}
+
+// ── Generar PDF del recibo con firma ────────────
+async function descargarPDFGasto() {
+    if (!gastoActualQR) return;
+    const { data } = await client.from('gastos').select('*').eq('id', gastoActualQR.id).single();
+    if (!data) { toast('Error cargando datos', 'error'); return; }
+    generarPDFRecibo(data);
+}
+
+async function descargarPDFGastoId(id) {
+    const { data } = await client.from('gastos').select('*').eq('id', id).single();
+    if (!data) { toast('Error cargando datos', 'error'); return; }
+    if (data.estado !== 'firmado') { toast('El recibo aún no ha sido firmado', 'error'); return; }
+    generarPDFRecibo(data);
+}
+
+function generarPDFRecibo(g) {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const valor = Number(g.valor || 0);
+
+    // ── Header azul ─────────────────────────────
+    doc.setFillColor(59, 130, 246);
+    doc.rect(0, 0, 210, 28, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(15); doc.setFont('helvetica', 'bold');
+    doc.text(EMPRESA_NOMBRE, 14, 12);
+    doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+    doc.text('NIT: ' + EMPRESA_NIT, 14, 20);
+    doc.setFontSize(13); doc.setFont('helvetica', 'bold');
+    doc.text('RECIBO DE CAJA MENOR', 196, 12, { align: 'right' });
+    doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+    doc.text(formatFecha(g.fecha), 196, 20, { align: 'right' });
+
+    // ── Número de recibo ─────────────────────────
+    doc.setTextColor(100, 116, 139);
+    doc.setFontSize(9);
+    doc.text('No. RCM-' + String(g.id).padStart(5, '0'), 14, 38);
+
+    // ── Datos del gasto ──────────────────────────
+    const filas = [
+        ['Concepto',      g.concepto],
+        ['Categoría',     g.categoria],
+        ['Descripción',   g.descripcion || '—'],
+        ['Entregado por', g.entregado_por],
+        ['Recibe',        g.responsable],
+    ];
+
+    let y = 44;
+    filas.forEach(([label, val]) => {
+        doc.setTextColor(100, 116, 139); doc.setFontSize(8); doc.setFont('helvetica', 'bold');
+        doc.text(label.toUpperCase(), 14, y);
+        doc.setTextColor(30, 30, 30); doc.setFontSize(10); doc.setFont('helvetica', 'normal');
+        doc.text(String(val), 14, y + 5);
+        y += 13;
+    });
+
+    // ── Valor total ──────────────────────────────
+    doc.setFillColor(241, 245, 249);
+    doc.rect(14, y, 182, 14, 'F');
+    doc.setTextColor(30, 30, 30); doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
+    doc.text('VALOR ENTREGADO:', 18, y + 9);
+    doc.setTextColor(59, 130, 246); doc.setFontSize(14);
+    doc.text('$' + valor.toLocaleString('es-CO'), 192, y + 9, { align: 'right' });
+
+    y += 22;
+
+    // ── Valor en letras (básico) ─────────────────
+    doc.setTextColor(100, 116, 139); doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+    doc.text('Son: ' + numeroALetras(valor) + ' pesos M/CTE', 14, y);
+
+    y += 14;
+
+    // ── Línea de firma ───────────────────────────
+    if (g.firma_data) {
+        doc.setTextColor(30, 30, 30); doc.setFontSize(9); doc.setFont('helvetica', 'bold');
+        doc.text('FIRMA DE QUIEN RECIBE:', 14, y);
+        y += 4;
+
+        // Insertar imagen de firma
+        try {
+            doc.addImage(g.firma_data, 'PNG', 14, y, 80, 30);
+        } catch (e) {
+            console.warn('Error insertando firma:', e);
+        }
+
+        y += 34;
+        doc.setDrawColor(100, 116, 139);
+        doc.line(14, y, 94, y);
+        doc.setTextColor(100, 116, 139); doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+        doc.text(g.responsable, 14, y + 4);
+        doc.text('C.C. ___________________________', 14, y + 9);
+
+        if (g.firma_fecha) {
+            const fFirma = new Date(g.firma_fecha).toLocaleString('es-CO');
+            doc.text('Firmado digitalmente: ' + fFirma, 14, y + 14);
+        }
+    } else {
+        doc.setTextColor(239, 68, 68); doc.setFontSize(9);
+        doc.text('⚠ Pendiente de firma', 14, y);
+    }
+
+    // ── Footer ───────────────────────────────────
+    doc.setFillColor(15, 23, 42);
+    doc.rect(0, 280, 210, 17, 'F');
+    doc.setTextColor(122, 139, 160); doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+    doc.text(EMPRESA_NOMBRE + ' · NIT: ' + EMPRESA_NIT, 105, 290, { align: 'center' });
+    doc.text('Documento generado el ' + new Date().toLocaleString('es-CO'), 105, 294, { align: 'center' });
+
+    doc.save('recibo-' + String(g.id).padStart(5, '0') + '-' + g.responsable.replace(/\s+/g, '-').toLowerCase() + '.pdf');
+    toast('PDF descargado ✓', 'exito');
+}
+
+// ── Número a letras (simplificado) ──────────────
+function numeroALetras(n) {
+    const unidades = ['', 'un', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve',
+        'diez', 'once', 'doce', 'trece', 'catorce', 'quince', 'dieciséis', 'diecisiete', 'dieciocho', 'diecinueve'];
+    const decenas  = ['', '', 'veinte', 'treinta', 'cuarenta', 'cincuenta', 'sesenta', 'setenta', 'ochenta', 'noventa'];
+    const centenas = ['', 'cien', 'doscientos', 'trescientos', 'cuatrocientos', 'quinientos', 'seiscientos', 'setecientos', 'ochocientos', 'novecientos'];
+    n = Math.floor(n);
+    if (n === 0) return 'cero';
+    if (n < 20) return unidades[n];
+    if (n < 100) return decenas[Math.floor(n/10)] + (n%10 ? ' y ' + unidades[n%10] : '');
+    if (n < 1000) return centenas[Math.floor(n/100)] + (n%100 ? ' ' + numeroALetras(n%100) : '');
+    if (n < 1000000) {
+        const miles = Math.floor(n/1000);
+        const resto = n % 1000;
+        return (miles === 1 ? 'mil' : numeroALetras(miles) + ' mil') + (resto ? ' ' + numeroALetras(resto) : '');
+    }
+    return n.toLocaleString('es-CO');
+}

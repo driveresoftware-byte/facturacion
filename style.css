@@ -797,3 +797,67 @@ textarea:focus { border-color: var(--accent); }
     .graficas-grid { grid-template-columns: 1fr; }
     .planes-grid   { grid-template-columns: 1fr 1fr; }
 }
+
+/* ══ GASTOS / QR ══ */
+.qr-estado-pendiente {
+    display: inline-block;
+    padding: 8px 18px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+    background: rgba(245,158,11,0.1);
+    color: var(--amarillo);
+    border: 1px solid rgba(245,158,11,0.3);
+}
+.qr-estado-firmado {
+    display: inline-block;
+    padding: 8px 18px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    background: rgba(16,185,129,0.1);
+    color: var(--verde);
+    border: 1px solid rgba(16,185,129,0.3);
+    animation: pulso .8s ease;
+}
+@keyframes pulso {
+    0%   { transform: scale(1); }
+    50%  { transform: scale(1.04); }
+    100% { transform: scale(1); }
+}
+
+/* ══ GASTOS / CAJA MENOR ══ */
+.stat-value.amarillo { color: var(--amarillo); }
+
+.qr-estado-pendiente {
+    display: inline-block;
+    padding: 10px 20px;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: 500;
+    background: rgba(245,158,11,0.12);
+    color: var(--amarillo);
+    border: 1px solid rgba(245,158,11,0.3);
+}
+
+.qr-estado-firmado {
+    display: inline-block;
+    padding: 10px 20px;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: 600;
+    background: rgba(16,185,129,0.12);
+    color: var(--verde);
+    border: 1px solid rgba(16,185,129,0.3);
+    animation: pulseVerde 1.5s ease infinite;
+}
+
+@keyframes pulseVerde {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: .7; }
+}
+
+/* QR container cleanup */
+#qrContainer img, #qrContainer canvas {
+    border-radius: 10px !important;
+}

@@ -10,6 +10,8 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
 <body>
 <div class="layout">
@@ -41,6 +43,10 @@
             <a href="#" class="nav-item" onclick="mostrarSeccion('balance',this)">
                 <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
                 Balance
+            </a>
+            <a href="#" class="nav-item" onclick="mostrarSeccion('gastos',this)">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                Gastos
             </a>
             <a href="#" class="nav-item" onclick="mostrarSeccion('envio',this)">
                 <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
@@ -252,6 +258,25 @@ Para pagos y consultas responda este mensaje.
             </div>
         </section>
 
+        <!-- GASTOS -->
+        <section id="sec-gastos" class="seccion oculto">
+            <div class="page-header">
+                <h1>Gastos / Caja Menor</h1>
+                <button class="btn-primary" onclick="abrirModalGasto()">+ Nuevo Gasto</button>
+            </div>
+            <div class="stats-grid" style="margin-bottom:24px">
+                <div class="stat-card"><div class="stat-label">Total gastado (mes)</div><div class="stat-value rojo" id="gastosTotal">$0</div></div>
+                <div class="stat-card"><div class="stat-label">Pendientes de firma</div><div class="stat-value amarillo" id="gastosPendientes">0</div></div>
+                <div class="stat-card"><div class="stat-label">Firmados</div><div class="stat-value verde" id="gastosFirmados">0</div></div>
+            </div>
+            <div class="tabla-container">
+                <table class="tabla">
+                    <thead><tr><th>Concepto</th><th>Categoría</th><th>Valor</th><th>Responsable</th><th>Entregado por</th><th>Fecha</th><th>Estado</th><th>Acciones</th></tr></thead>
+                    <tbody id="tablaGastos"></tbody>
+                </table>
+            </div>
+        </section>
+
     </main>
 </div>
 
@@ -319,6 +344,67 @@ Para pagos y consultas responda este mensaje.
 </div>
 
 <div id="toast" class="toast oculto"></div>
+
+<!-- Modal Nuevo Gasto -->
+<div id="modalGasto" class="modal-overlay oculto">
+    <div class="modal" style="max-width:480px">
+        <div class="modal-header"><h3 id="tituloGasto">Nuevo Gasto</h3><button class="modal-close" onclick="cerrarModalGasto()">✕</button></div>
+        <div style="padding:24px;display:flex;flex-direction:column;gap:14px">
+            <input type="hidden" id="gastoId">
+            <div class="form-grid" style="grid-template-columns:1fr 1fr">
+                <div class="field" style="grid-column:1/-1"><label>Concepto</label><input type="text" id="gastoConcepto" placeholder="Ej: Compra de cable de red"></div>
+                <div class="field">
+                    <label>Categoría</label>
+                    <select id="gastoCategoria">
+                        <option value="mantenimiento">Mantenimiento</option>
+                        <option value="materiales">Materiales</option>
+                        <option value="transporte">Transporte</option>
+                        <option value="servicios">Servicios</option>
+                        <option value="nomina">Nómina</option>
+                        <option value="arriendo">Arriendo</option>
+                        <option value="otros">Otros</option>
+                    </select>
+                </div>
+                <div class="field"><label>Valor ($)</label><input type="number" id="gastoValor" placeholder="0"></div>
+                <div class="field"><label>Fecha</label><input type="date" id="gastoFecha"></div>
+                <div class="field">
+                    <label>Quien entrega (caja)</label>
+                    <input type="text" id="gastoEntregadoPor" placeholder="Nombre de quien entrega" list="listaCobradoresG">
+                    <datalist id="listaCobradoresG"></datalist>
+                </div>
+                <div class="field" style="grid-column:1/-1"><label>Quien recibe (responsable)</label><input type="text" id="gastoResponsable" placeholder="Nombre de quien recibe el dinero"></div>
+                <div class="field" style="grid-column:1/-1"><label>Descripción (opcional)</label><input type="text" id="gastoDesc" placeholder="Detalle adicional del gasto"></div>
+            </div>
+        </div>
+        <div class="modal-actions">
+            <button class="btn-secondary" onclick="cerrarModalGasto()">Cancelar</button>
+            <button class="btn-primary" onclick="guardarGasto()">Guardar y generar QR</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal QR Firma -->
+<div id="modalQR" class="modal-overlay oculto">
+    <div class="modal" style="max-width:420px;text-align:center">
+        <div class="modal-header"><h3>Escanear para Firmar</h3><button class="modal-close" onclick="cerrarModalQR()">✕</button></div>
+        <div style="padding:28px 24px">
+            <p style="color:var(--text2);font-size:13px;margin-bottom:20px">
+                Entrega el teléfono al <strong id="qrResponsable"></strong> para que escanee el código y firme el recibo.
+            </p>
+            <div id="qrContainer" style="display:flex;justify-content:center;margin-bottom:20px">
+                <canvas id="canvasQR" style="border-radius:12px;background:#fff;padding:12px"></canvas>
+            </div>
+            <div style="font-size:12px;color:var(--text2);margin-bottom:20px">
+                El PDF se generará automáticamente una vez que se firme.
+            </div>
+            <div id="qrEstado" class="qr-estado-pendiente">⏳ Esperando firma...</div>
+        </div>
+        <div class="modal-actions">
+            <button class="btn-secondary" onclick="cerrarModalQR()">Cerrar</button>
+            <button class="btn-primary oculto" id="btnDescargarPDFGasto" onclick="descargarPDFGasto()">📄 Descargar PDF</button>
+        </div>
+    </div>
+</div>
 <script src="app.js"></script>
 </body>
 </html>
