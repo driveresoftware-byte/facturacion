@@ -1238,7 +1238,7 @@ async function cargarPerfiles() {
 
     grid.innerHTML = todosPerfiles.map(p => {
         const stats     = movsPorPerfil[p.id] || { ingresos: 0, gastos: 0 };
-        const saldo     = Number(p.saldo_inicial || 0) + stats.ingresos - stats.gastos;
+        const saldo     = stats.ingresos - stats.gastos;
         const initials  = p.nombre.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
         const eActiva   = perfilActivo?.id === p.id;
 
@@ -1313,7 +1313,7 @@ async function cargarMovimientos() {
 
     const totalIngresos = movimientosActivos.filter(m => m.tipo === 'ingreso').reduce((s, m) => s + Number(m.valor || 0), 0);
     const totalGastos   = movimientosActivos.filter(m => m.tipo === 'gasto').reduce((s, m) => s + Number(m.valor || 0), 0);
-    const saldo         = Number(perfilActivo.saldo_inicial || 0) + totalIngresos - totalGastos;
+    const saldo         = totalIngresos - totalGastos;
 
     document.getElementById('pdIngresos').textContent   = '$' + totalIngresos.toLocaleString('es-CO');
     document.getElementById('pdGastos').textContent     = '$' + totalGastos.toLocaleString('es-CO');
@@ -1353,7 +1353,13 @@ function renderMovimientos(lista) {
             </td>
             <td style="font-size:12px;color:var(--text2)">${m.descripcion || '—'}</td>
             <td>
-                <button class="btn-accion borrar" onclick="eliminarMovimiento(${m.id})">✕</button>
+                <div style="display:flex;gap:6px;align-items:center">
+                    ${m.archivo_url
+                        ? `<a href="${m.archivo_url}" target="_blank" class="btn-accion factura" style="text-decoration:none;font-size:11px">📎 Ver</a>`
+                        : ''
+                    }
+                    <button class="btn-accion borrar" onclick="eliminarMovimiento(${m.id})">✕</button>
+                </div>
             </td>
         </tr>`;
     }).join('');
@@ -1454,7 +1460,6 @@ function abrirModalPerfil(id) {
     document.getElementById('perfilNombre').value      = '';
     document.getElementById('perfilCargo').value       = '';
     document.getElementById('perfilTelefono').value    = '';
-    document.getElementById('perfilSaldoInicial').value= '0';
     document.getElementById('perfilColor').value       = '#3b82f6';
     document.getElementById('tituloPerfil').textContent= 'Nuevo Perfil';
     // Reset color picker
@@ -1469,7 +1474,6 @@ function abrirModalPerfil(id) {
             document.getElementById('perfilNombre').value      = p.nombre || '';
             document.getElementById('perfilCargo').value       = p.cargo  || '';
             document.getElementById('perfilTelefono').value    = p.telefono || '';
-            document.getElementById('perfilSaldoInicial').value= p.saldo_inicial || 0;
             document.getElementById('perfilColor').value       = p.color || '#3b82f6';
             document.getElementById('tituloPerfil').textContent= 'Editar Perfil';
             document.querySelectorAll('.color-dot').forEach(d => {
@@ -1497,12 +1501,11 @@ function elegirColor(el) {
 async function guardarPerfil() {
     const id     = document.getElementById('perfilId').value;
     const datos  = {
-        nombre:        document.getElementById('perfilNombre').value.trim(),
-        cargo:         document.getElementById('perfilCargo').value.trim(),
-        telefono:      document.getElementById('perfilTelefono').value.trim(),
-        saldo_inicial: parseFloat(document.getElementById('perfilSaldoInicial').value) || 0,
-        color:         document.getElementById('perfilColor').value,
-        activo:        true
+        nombre:   document.getElementById('perfilNombre').value.trim(),
+        cargo:    document.getElementById('perfilCargo').value.trim(),
+        telefono: document.getElementById('perfilTelefono').value.trim(),
+        color:    document.getElementById('perfilColor').value,
+        activo:   true
     };
     if (!datos.nombre) { toast('El nombre es obligatorio', 'error'); return; }
     let error;
@@ -1548,32 +1551,102 @@ function abrirModalMovimiento() {
 
 function cerrarModalMovimiento() {
     document.getElementById('modalMovimiento').classList.add('oculto');
+    quitarArchivo();
+}
+
+function previsualizarArchivo(input) {
+    const file     = input.files[0];
+    const preview  = document.getElementById('archivoPreview');
+    const label    = document.getElementById('fileLabel');
+    const labelTxt = document.getElementById('fileLabelText');
+
+    if (!file) { preview.style.display = 'none'; label.classList.remove('cargado'); return; }
+
+    const esPDF = file.type === 'application/pdf';
+    const sizeKB = (file.size / 1024).toFixed(1);
+    labelTxt.textContent = file.name;
+    label.classList.add('cargado');
+    preview.style.display = 'block';
+
+    if (esPDF) {
+        preview.innerHTML = `
+            <div class="archivo-preview-item">
+                <span style="font-size:28px">📄</span>
+                <div class="archivo-nombre">${file.name}</div>
+                <div class="archivo-size">${sizeKB} KB</div>
+                <button class="archivo-quitar" onclick="quitarArchivo()">✕</button>
+            </div>`;
+    } else {
+        const reader = new FileReader();
+        reader.onload = e => {
+            preview.innerHTML = `
+                <div class="archivo-preview-item">
+                    <img src="${e.target.result}" alt="preview">
+                    <div class="archivo-nombre">${file.name}</div>
+                    <div class="archivo-size">${sizeKB} KB</div>
+                    <button class="archivo-quitar" onclick="quitarArchivo()">✕</button>
+                </div>`;
+        };
+        reader.readAsDataURL(file);
+    }
+}
+
+function quitarArchivo() {
+    document.getElementById('movArchivo').value      = '';
+    document.getElementById('archivoPreview').style.display = 'none';
+    document.getElementById('fileLabel').classList.remove('cargado');
+    document.getElementById('fileLabelText').textContent = 'Seleccionar archivo...';
+}
+
+async function subirArchivo(file) {
+    if (!file) return { url: null, nombre: null };
+    const ext      = file.name.split('.').pop();
+    const fileName = `mov_${Date.now()}_${Math.random().toString(36).slice(2,7)}.${ext}`;
+    const { data, error } = await client.storage
+        .from('soportes')
+        .upload(fileName, file, { contentType: file.type, upsert: false });
+    if (error) { console.error('Error subiendo archivo:', error); return { url: null, nombre: file.name }; }
+    const { data: pub } = client.storage.from('soportes').getPublicUrl(fileName);
+    return { url: pub.publicUrl, nombre: file.name };
 }
 
 async function guardarMovimiento() {
-    const concepto = document.getElementById('movConcepto').value.trim();
-    const valor    = parseFloat(document.getElementById('movValor').value) || 0;
-    const fecha    = document.getElementById('movFecha').value;
-    const categoria= document.getElementById('movCategoria').value;
+    const concepto    = document.getElementById('movConcepto').value.trim();
+    const valor       = parseFloat(document.getElementById('movValor').value) || 0;
+    const fecha       = document.getElementById('movFecha').value;
+    const categoria   = document.getElementById('movCategoria').value;
     const descripcion = document.getElementById('movDesc').value.trim();
+    const fileInput   = document.getElementById('movArchivo');
+    const file        = fileInput?.files[0] || null;
 
     if (!concepto) { toast('Ingresa un concepto', 'error'); return; }
     if (!valor)    { toast('Ingresa un valor mayor a 0', 'error'); return; }
     if (!fecha)    { toast('Ingresa la fecha', 'error'); return; }
 
+    const btnGuardar = document.getElementById('btnGuardarMov');
+    btnGuardar.disabled = true;
+    btnGuardar.textContent = 'Guardando...';
+
+    // Subir archivo si existe
+    const { url: archivo_url, nombre: archivo_nombre } = await subirArchivo(file);
+
     const { error } = await client.from('movimientos').insert([{
         perfil_id: perfilActivo.id,
         tipo:      movTipoActual,
         concepto, categoria, valor, fecha, descripcion,
-        origen:   'manual'
+        origen:   'manual',
+        archivo_url,
+        archivo_nombre
     }]);
+
+    btnGuardar.disabled = false;
+    btnGuardar.textContent = movTipoActual === 'ingreso' ? 'Guardar Ingreso' : 'Guardar Gasto';
 
     if (error) { toast('Error guardando movimiento', 'error'); console.error(error); return; }
     toast(`${movTipoActual === 'ingreso' ? 'Ingreso' : 'Gasto'} registrado ✓`, 'exito');
     cerrarModalMovimiento();
     await cargarMovimientos();
-    cargarPerfiles(); // actualizar saldos en tarjetas
-    // Actualizar balance global si está abierto
+    cargarPerfiles();
     if (!document.getElementById('sec-balance').classList.contains('oculto')) cargarBalance();
 }
 
