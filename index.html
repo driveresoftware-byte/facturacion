@@ -14,51 +14,70 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
 <body>
-<div class="layout">
+<div class="layout-wrap">
 
-    <!-- ══ SIDEBAR ══ -->
-    <aside class="sidebar">
-        <div class="logo"><span class="logo-icon">⚡</span><span>FacturNet</span></div>
-        <nav>
-            <a href="#" class="nav-item active"  onclick="mostrarSeccion('dashboard',this)">
-                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-                Dashboard
-            </a>
-            <a href="#" class="nav-item" onclick="mostrarSeccion('nuevo',this)">
-                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-                Nuevo Cliente
-            </a>
-            <a href="#" class="nav-item" onclick="mostrarSeccion('clientes',this)">
-                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                Clientes
-            </a>
-            <a href="#" class="nav-item" onclick="mostrarSeccion('planes',this)">
-                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-                Planes
-            </a>
-            <a href="#" class="nav-item" onclick="mostrarSeccion('pagos',this)">
-                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-                Pagos
-            </a>
-            <a href="#" class="nav-item" onclick="mostrarSeccion('balance',this)">
-                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-                Balance
-            </a>
-            <a href="#" class="nav-item" onclick="mostrarSeccion('gastos',this)">
-                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-                Gastos
-            </a>
-            <a href="#" class="nav-item" onclick="mostrarSeccion('perfiles',this)">
-                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                Perfiles
-            </a>
-            <a href="#" class="nav-item" onclick="mostrarSeccion('envio',this)">
-                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                Envío masivo
-            </a>
-        </nav>
-        <div class="sidebar-footer"><span id="totalClientes">0 clientes</span></div>
-    </aside>
+    <!-- ══ TOP NAV ══ -->
+    <div class="topbar">
+        <div class="topbar-logo"><span>⚡</span> FacturNet</div>
+        <div class="topbar-info"><span id="totalClientes">0 clientes</span></div>
+    </div>
+
+    <div class="modnav">
+        <button class="modnav-btn active" onclick="mostrarSeccion('dashboard',this)">
+            <div class="modnav-icon">
+                <svg width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+            </div>
+            <span>Dashboard</span>
+        </button>
+        <button class="modnav-btn" onclick="mostrarSeccion('nuevo',this)">
+            <div class="modnav-icon">
+                <svg width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+            </div>
+            <span>Nuevo Cliente</span>
+        </button>
+        <button class="modnav-btn" onclick="mostrarSeccion('clientes',this)">
+            <div class="modnav-icon">
+                <svg width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </div>
+            <span>Clientes</span>
+        </button>
+        <button class="modnav-btn" onclick="mostrarSeccion('planes',this)">
+            <div class="modnav-icon">
+                <svg width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            </div>
+            <span>Planes</span>
+        </button>
+        <button class="modnav-btn" onclick="mostrarSeccion('pagos',this)">
+            <div class="modnav-icon">
+                <svg width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+            </div>
+            <span>Pagos</span>
+        </button>
+        <button class="modnav-btn" onclick="mostrarSeccion('balance',this)">
+            <div class="modnav-icon">
+                <svg width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+            </div>
+            <span>Balance</span>
+        </button>
+        <button class="modnav-btn" onclick="mostrarSeccion('gastos',this)">
+            <div class="modnav-icon">
+                <svg width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            </div>
+            <span>Gastos</span>
+        </button>
+        <button class="modnav-btn" onclick="mostrarSeccion('perfiles',this)">
+            <div class="modnav-icon">
+                <svg width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            </div>
+            <span>Perfiles</span>
+        </button>
+        <button class="modnav-btn" onclick="mostrarSeccion('envio',this)">
+            <div class="modnav-icon">
+                <svg width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            </div>
+            <span>Envío Masivo</span>
+        </button>
+    </div>
 
     <!-- ══ MAIN ══ -->
     <main class="main">

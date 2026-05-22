@@ -68,9 +68,9 @@ function toast(msg, tipo='') {
 // ═══════════════════════════════════════════════
 function mostrarSeccion(nombre, el) {
     document.querySelectorAll('.seccion').forEach(s=>s.classList.add('oculto'));
-    document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+    document.querySelectorAll('.modnav-btn').forEach(n=>n.classList.remove('active'));
     document.getElementById('sec-'+nombre).classList.remove('oculto');
-    (el||event?.target?.closest('.nav-item'))?.classList.add('active');
+    (el||event?.target?.closest('.modnav-btn'))?.classList.add('active');
     if (nombre==='dashboard') cargarDashboard();
     if (nombre==='clientes')  listarClientes();
     if (nombre==='planes')    cargarPlanes();
@@ -213,7 +213,7 @@ async function guardarCliente() {
     toast(id?'Cliente actualizado ✓':'Cliente guardado ✓','exito');
     limpiarFormulario();
     await listarClientes();
-    mostrarSeccion('clientes', document.querySelectorAll('.nav-item')[2]);
+    mostrarSeccion('clientes', document.querySelectorAll('.modnav-btn')[2]);
     cargarDashboard();
 }
 
@@ -231,7 +231,7 @@ function editarCliente(id) {
     document.getElementById('estado').value       = c.estado||'activo';
     document.getElementById('velocidad_plan').value = '';
     document.getElementById('tituloFormulario').textContent = 'Editar Cliente';
-    mostrarSeccion('nuevo', document.querySelectorAll('.nav-item')[1]);
+    mostrarSeccion('nuevo', document.querySelectorAll('.modnav-btn')[1]);
 }
 
 async function eliminarCliente(id) {
@@ -242,7 +242,7 @@ async function eliminarCliente(id) {
     await listarClientes(); cargarDashboard();
 }
 
-function cancelarEdicion() { limpiarFormulario(); mostrarSeccion('clientes',document.querySelectorAll('.nav-item')[2]); }
+function cancelarEdicion() { limpiarFormulario(); mostrarSeccion('clientes',document.querySelectorAll('.modnav-btn')[2]); }
 
 function limpiarFormulario() {
     ['editId','nombre','telefono','correo','direccion','plan','valor','fecha_inicio','fecha_corte','velocidad_plan']
