@@ -48,6 +48,10 @@
                 <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
                 Gastos
             </a>
+            <a href="#" class="nav-item" onclick="mostrarSeccion('perfiles',this)">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                Perfiles
+            </a>
             <a href="#" class="nav-item" onclick="mostrarSeccion('envio',this)">
                 <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                 Envío masivo
@@ -178,6 +182,18 @@
                 <div class="stat-card"><div class="stat-label">% Cumplimiento</div><div class="stat-value azul" id="balPct">0%</div></div>
             </div>
 
+            <!-- Resumen movimientos de perfiles -->
+            <div id="balPerfiles" style="display:none;margin-bottom:24px">
+                <div class="grafica-card">
+                    <h3>Movimientos de Perfiles este mes</h3>
+                    <div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:4px">
+                        <div><div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.05em">Ingresos adicionales</div><div style="font-size:22px;font-weight:700;color:var(--verde)" id="balIngresosPerf">$0</div></div>
+                        <div><div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.05em">Gastos de perfiles</div><div style="font-size:22px;font-weight:700;color:var(--rojo)" id="balGastosPerf">$0</div></div>
+                        <div><div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.05em">Neto perfiles</div><div style="font-size:22px;font-weight:700;color:var(--accent)" id="balNetoPerf">$0</div></div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Gráficas -->
             <div class="graficas-grid">
                 <div class="grafica-card">
@@ -205,7 +221,69 @@
             </div>
         </section>
 
-        <!-- ENVÍO MASIVO -->
+        <!-- PERFILES -->
+        <section id="sec-perfiles" class="seccion oculto">
+            <div class="page-header">
+                <h1>Perfiles de Caja</h1>
+                <button class="btn-primary" onclick="abrirModalPerfil()">+ Nuevo Perfil</button>
+            </div>
+
+            <!-- Cards de perfiles -->
+            <div id="perfilesGrid" class="perfiles-grid"></div>
+
+            <!-- Detalle de perfil seleccionado -->
+            <div id="perfilDetalle" class="oculto" style="margin-top:28px">
+                <div class="page-header" style="margin-bottom:20px">
+                    <div style="display:flex;align-items:center;gap:12px">
+                        <div id="perfilDetalleColor" style="width:14px;height:14px;border-radius:50%"></div>
+                        <h2 id="perfilDetalleTitulo" style="font-size:20px;font-weight:700"></h2>
+                        <span id="perfilDetalleCargo" style="font-size:13px;color:var(--text2)"></span>
+                    </div>
+                    <button class="btn-primary" id="btnNuevoMovimiento" onclick="abrirModalMovimiento()">+ Movimiento</button>
+                </div>
+
+                <!-- Stats del perfil -->
+                <div class="stats-grid" style="margin-bottom:24px">
+                    <div class="stat-card"><div class="stat-label">Total Ingresos</div><div class="stat-value verde" id="pdIngresos">$0</div></div>
+                    <div class="stat-card"><div class="stat-label">Total Gastos</div><div class="stat-value rojo" id="pdGastos">$0</div></div>
+                    <div class="stat-card"><div class="stat-label">Saldo Disponible</div><div class="stat-value azul" id="pdSaldo">$0</div></div>
+                    <div class="stat-card"><div class="stat-label">Movimientos</div><div class="stat-value" id="pdMovimientos">0</div></div>
+                </div>
+
+                <!-- Gráficas -->
+                <div class="graficas-grid" style="margin-bottom:24px">
+                    <div class="grafica-card">
+                        <h3>Saldo actual</h3>
+                        <div class="chart-wrap"><canvas id="chartPerfilTorta"></canvas></div>
+                    </div>
+                    <div class="grafica-card">
+                        <h3>Ingresos vs Gastos (últimos 6 meses)</h3>
+                        <div class="chart-wrap"><canvas id="chartPerfilLinea"></canvas></div>
+                    </div>
+                </div>
+
+                <!-- Tabla de movimientos -->
+                <div class="page-header" style="margin-bottom:14px">
+                    <h3 style="font-size:15px;font-weight:600;color:var(--text2)">HISTORIAL DE MOVIMIENTOS</h3>
+                    <div class="header-actions">
+                        <select id="filtroMovTipo" onchange="filtrarMovimientos()" class="select-filtro">
+                            <option value="">Todos</option>
+                            <option value="ingreso">Ingresos</option>
+                            <option value="gasto">Gastos</option>
+                        </select>
+                        <select id="filtroMovMes" onchange="filtrarMovimientos()" class="select-filtro"></select>
+                    </div>
+                </div>
+                <div class="tabla-container">
+                    <table class="tabla">
+                        <thead><tr><th>Fecha</th><th>Concepto</th><th>Categoría</th><th>Tipo</th><th>Valor</th><th>Descripción</th><th></th></tr></thead>
+                        <tbody id="tablaMovimientos"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+
         <section id="sec-envio" class="seccion oculto">
             <div class="page-header">
                 <h1>Envío Masivo WhatsApp</h1>
@@ -344,6 +422,78 @@ Para pagos y consultas responda este mensaje.
 </div>
 
 <div id="toast" class="toast oculto"></div>
+
+<!-- Modal Perfil -->
+<div id="modalPerfil" class="modal-overlay oculto">
+    <div class="modal" style="max-width:460px">
+        <div class="modal-header"><h3 id="tituloPerfil">Nuevo Perfil</h3><button class="modal-close" onclick="cerrarModalPerfil()">✕</button></div>
+        <div style="padding:24px;display:flex;flex-direction:column;gap:14px">
+            <input type="hidden" id="perfilId">
+            <div class="form-grid" style="grid-template-columns:1fr 1fr">
+                <div class="field" style="grid-column:1/-1"><label>Nombre completo</label><input type="text" id="perfilNombre" placeholder="Ej: Carlos Rodríguez"></div>
+                <div class="field"><label>Cargo / Rol</label><input type="text" id="perfilCargo" placeholder="Ej: Cobrador"></div>
+                <div class="field"><label>Teléfono</label><input type="text" id="perfilTelefono" placeholder="3001234567"></div>
+                <div class="field"><label>Saldo inicial ($)</label><input type="number" id="perfilSaldoInicial" placeholder="0"></div>
+                <div class="field">
+                    <label>Color identificador</label>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px" id="colorPicker">
+                        <span class="color-dot" style="background:#3b82f6" data-color="#3b82f6" onclick="elegirColor(this)">✓</span>
+                        <span class="color-dot" style="background:#10b981" data-color="#10b981" onclick="elegirColor(this)"></span>
+                        <span class="color-dot" style="background:#f59e0b" data-color="#f59e0b" onclick="elegirColor(this)"></span>
+                        <span class="color-dot" style="background:#ef4444" data-color="#ef4444" onclick="elegirColor(this)"></span>
+                        <span class="color-dot" style="background:#8b5cf6" data-color="#8b5cf6" onclick="elegirColor(this)"></span>
+                        <span class="color-dot" style="background:#06b6d4" data-color="#06b6d4" onclick="elegirColor(this)"></span>
+                        <span class="color-dot" style="background:#ec4899" data-color="#ec4899" onclick="elegirColor(this)"></span>
+                    </div>
+                    <input type="hidden" id="perfilColor" value="#3b82f6">
+                </div>
+            </div>
+        </div>
+        <div class="modal-actions">
+            <button class="btn-secondary" onclick="cerrarModalPerfil()">Cancelar</button>
+            <button class="btn-primary" onclick="guardarPerfil()">Guardar Perfil</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Movimiento -->
+<div id="modalMovimiento" class="modal-overlay oculto">
+    <div class="modal" style="max-width:460px">
+        <div class="modal-header"><h3>Nuevo Movimiento</h3><button class="modal-close" onclick="cerrarModalMovimiento()">✕</button></div>
+        <div style="padding:24px;display:flex;flex-direction:column;gap:14px">
+            <input type="hidden" id="movPerfilId">
+            <div class="tipo-toggle">
+                <button id="btnTipoIngreso" class="tipo-btn activo" onclick="setTipoMov('ingreso')">↑ Ingreso</button>
+                <button id="btnTipoGasto"   class="tipo-btn"        onclick="setTipoMov('gasto')">↓ Gasto</button>
+            </div>
+            <div class="form-grid" style="grid-template-columns:1fr 1fr">
+                <div class="field" style="grid-column:1/-1"><label>Concepto</label><input type="text" id="movConcepto" placeholder="Ej: Cobro cuota internet"></div>
+                <div class="field">
+                    <label>Categoría</label>
+                    <select id="movCategoria">
+                        <option value="cobro">Cobro cliente</option>
+                        <option value="venta">Venta</option>
+                        <option value="prestamo">Préstamo</option>
+                        <option value="mantenimiento">Mantenimiento</option>
+                        <option value="materiales">Materiales</option>
+                        <option value="transporte">Transporte</option>
+                        <option value="nomina">Nómina</option>
+                        <option value="servicios">Servicios</option>
+                        <option value="arriendo">Arriendo</option>
+                        <option value="otros">Otros</option>
+                    </select>
+                </div>
+                <div class="field"><label>Valor ($)</label><input type="number" id="movValor" placeholder="0"></div>
+                <div class="field" style="grid-column:1/-1"><label>Fecha</label><input type="date" id="movFecha"></div>
+                <div class="field" style="grid-column:1/-1"><label>Descripción (opcional)</label><input type="text" id="movDesc" placeholder="Detalle adicional"></div>
+            </div>
+        </div>
+        <div class="modal-actions">
+            <button class="btn-secondary" onclick="cerrarModalMovimiento()">Cancelar</button>
+            <button class="btn-primary" id="btnGuardarMov" onclick="guardarMovimiento()">Guardar Ingreso</button>
+        </div>
+    </div>
+</div>
 
 <!-- Modal Nuevo Gasto -->
 <div id="modalGasto" class="modal-overlay oculto">

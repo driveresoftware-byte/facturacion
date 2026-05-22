@@ -76,6 +76,7 @@ function mostrarSeccion(nombre, el) {
     if (nombre==='planes')    cargarPlanes();
     if (nombre==='pagos')     { poblarSelectorMes('filtroPagoMes'); cargarPagos(); }
     if (nombre==='gastos')    cargarGastos();
+    if (nombre==='perfiles')  cargarPerfiles();
     if (nombre==='envio')     iniciarSeccionEnvio();
 }
 
@@ -435,11 +436,23 @@ async function cargarBalance() {
         .eq('mes', mes);
     const pagos = pd||[];
 
+    // Movimientos de perfiles del mes
+    const [y2, m2] = mes.split('-');
+    const inicioMes = `${y2}-${m2}-01`;
+    const finMes    = new Date(+y2, +m2, 0).toISOString().split('T')[0];
+    const { data: movsPerfiles } = await client.from('movimientos')
+        .select('tipo, valor, perfil_id, perfiles(nombre)')
+        .gte('fecha', inicioMes).lte('fecha', finMes);
+    const ingresosPerfiles = (movsPerfiles||[]).filter(m=>m.tipo==='ingreso').reduce((s,m)=>s+Number(m.valor||0),0);
+    const gastosPerfiles   = (movsPerfiles||[]).filter(m=>m.tipo==='gasto').reduce((s,m)=>s+Number(m.valor||0),0);
+
     // Total facturado = suma de todos los clientes activos+mora
     const totalFacturado = todosClientes
         .filter(c=>['activo','mora'].includes(c.estado))
         .reduce((s,c)=>s+Number(c.valor_mensual||0),0);
     const totalRecaudado = pagos.reduce((s,p)=>s+Number(p.valor_pagado||0),0);
+    const totalIngresos  = totalRecaudado + ingresosPerfiles;
+    const totalGastos2   = gastosPerfiles;
     const pendiente      = Math.max(0, totalFacturado - totalRecaudado);
     const pct            = totalFacturado>0 ? Math.round((totalRecaudado/totalFacturado)*100) : 0;
 
@@ -447,6 +460,15 @@ async function cargarBalance() {
     document.getElementById('balRecaudado').textContent = '$'+totalRecaudado.toLocaleString('es-CO');
     document.getElementById('balPendiente').textContent = '$'+pendiente.toLocaleString('es-CO');
     document.getElementById('balPct').textContent       = pct+'%';
+
+    // Mostrar resumen de perfiles si hay movimientos
+    const balPerfilesEl = document.getElementById('balPerfiles');
+    if (balPerfilesEl && (ingresosPerfiles > 0 || gastosPerfiles > 0)) {
+        balPerfilesEl.style.display = 'block';
+        document.getElementById('balIngresosPerf').textContent = '+$'+ingresosPerfiles.toLocaleString('es-CO');
+        document.getElementById('balGastosPerf').textContent   = '-$'+gastosPerfiles.toLocaleString('es-CO');
+        document.getElementById('balNetoPerf').textContent     = '$'+(ingresosPerfiles-gastosPerfiles).toLocaleString('es-CO');
+    }
 
     // ── Gráfica torta: Pagado vs Pendiente ──────
     const ctxT = document.getElementById('chartTorta').getContext('2d');
@@ -1181,4 +1203,385 @@ function numeroALetras(n) {
         return (miles === 1 ? 'mil' : numeroALetras(miles) + ' mil') + (resto ? ' ' + numeroALetras(resto) : '');
     }
     return n.toLocaleString('es-CO');
+}
+
+// ═══════════════════════════════════════════════
+// PERFILES DE CAJA
+// ═══════════════════════════════════════════════
+let todosPerfiles      = [];
+let perfilActivo       = null;
+let movimientosActivos = [];
+let chartPerfilTorta   = null;
+let chartPerfilLinea   = null;
+let movTipoActual      = 'ingreso';
+
+// ── Cargar y mostrar tarjetas de perfiles ───────
+async function cargarPerfiles() {
+    const { data, error } = await client.from('perfiles').select('*').order('nombre');
+    if (error) { console.error(error); return; }
+    todosPerfiles = data || [];
+
+    // Cargar saldos calculados para cada perfil
+    const { data: movs } = await client.from('movimientos').select('perfil_id, tipo, valor');
+    const movsPorPerfil  = {};
+    (movs || []).forEach(m => {
+        if (!movsPorPerfil[m.perfil_id]) movsPorPerfil[m.perfil_id] = { ingresos: 0, gastos: 0 };
+        if (m.tipo === 'ingreso') movsPorPerfil[m.perfil_id].ingresos += Number(m.valor || 0);
+        if (m.tipo === 'gasto')   movsPorPerfil[m.perfil_id].gastos  += Number(m.valor || 0);
+    });
+
+    const grid = document.getElementById('perfilesGrid');
+    if (!todosPerfiles.length) {
+        grid.innerHTML = '<p style="color:var(--text2);font-size:14px">No hay perfiles creados. Crea uno para empezar.</p>';
+        return;
+    }
+
+    grid.innerHTML = todosPerfiles.map(p => {
+        const stats     = movsPorPerfil[p.id] || { ingresos: 0, gastos: 0 };
+        const saldo     = Number(p.saldo_inicial || 0) + stats.ingresos - stats.gastos;
+        const initials  = p.nombre.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+        const eActiva   = perfilActivo?.id === p.id;
+
+        return `<div class="perfil-card ${eActiva ? 'activa' : ''}"
+                     style="--perfil-color:${p.color}"
+                     onclick="seleccionarPerfil(${p.id})">
+            <div class="perfil-avatar" style="background:${p.color}">${initials}</div>
+            <div class="perfil-nombre">${p.nombre}</div>
+            <div class="perfil-cargo">${p.cargo || 'Sin cargo'} ${p.telefono ? '· ' + p.telefono : ''}</div>
+            <div class="perfil-saldo-label">Saldo disponible</div>
+            <div class="perfil-saldo-valor ${saldo >= 0 ? 'positivo' : 'negativo'}">
+                $${Math.abs(saldo).toLocaleString('es-CO')}${saldo < 0 ? ' ⚠️' : ''}
+            </div>
+            <div class="perfil-mini-stats">
+                <div class="perfil-mini-stat">
+                    <div class="label">↑ Ingresos</div>
+                    <div class="val" style="color:var(--verde)">$${stats.ingresos.toLocaleString('es-CO')}</div>
+                </div>
+                <div class="perfil-mini-stat">
+                    <div class="label">↓ Gastos</div>
+                    <div class="val" style="color:var(--rojo)">$${stats.gastos.toLocaleString('es-CO')}</div>
+                </div>
+            </div>
+            <div class="perfil-acciones">
+                <button class="btn-accion editar" onclick="event.stopPropagation();editarPerfil(${p.id})">Editar</button>
+                <button class="btn-accion borrar" onclick="event.stopPropagation();eliminarPerfil(${p.id})">Eliminar</button>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+// ── Seleccionar perfil → mostrar detalle ────────
+async function seleccionarPerfil(id) {
+    perfilActivo = todosPerfiles.find(p => p.id === id);
+    if (!perfilActivo) return;
+
+    document.getElementById('perfilDetalle').classList.remove('oculto');
+    document.getElementById('movPerfilId').value = id;
+    document.getElementById('perfilDetalleTitulo').textContent = perfilActivo.nombre;
+    document.getElementById('perfilDetalleCargo').textContent  = perfilActivo.cargo || '';
+    document.getElementById('perfilDetalleColor').style.background = perfilActivo.color;
+
+    // Refrescar tarjetas para marcar activa
+    await cargarPerfiles();
+
+    // Poblar selector de meses en movimientos
+    poblarSelectorMes('filtroMovMes');
+
+    // Scroll al detalle
+    document.getElementById('perfilDetalle').scrollIntoView({ behavior: 'smooth' });
+
+    await cargarMovimientos();
+}
+
+// ── Cargar movimientos del perfil activo ────────
+async function cargarMovimientos() {
+    if (!perfilActivo) return;
+
+    const mes  = document.getElementById('filtroMovMes')?.value || mesActual();
+    const tipo = document.getElementById('filtroMovTipo')?.value || '';
+    const [y, m] = mes.split('-');
+    const inicio = `${y}-${m}-01`;
+    const fin    = new Date(+y, +m, 0).toISOString().split('T')[0];
+
+    // Todos los movimientos del perfil (sin filtro de mes) para stats totales
+    const { data: todos } = await client.from('movimientos')
+        .select('*')
+        .eq('perfil_id', perfilActivo.id)
+        .order('fecha', { ascending: false });
+
+    movimientosActivos = todos || [];
+
+    const totalIngresos = movimientosActivos.filter(m => m.tipo === 'ingreso').reduce((s, m) => s + Number(m.valor || 0), 0);
+    const totalGastos   = movimientosActivos.filter(m => m.tipo === 'gasto').reduce((s, m) => s + Number(m.valor || 0), 0);
+    const saldo         = Number(perfilActivo.saldo_inicial || 0) + totalIngresos - totalGastos;
+
+    document.getElementById('pdIngresos').textContent   = '$' + totalIngresos.toLocaleString('es-CO');
+    document.getElementById('pdGastos').textContent     = '$' + totalGastos.toLocaleString('es-CO');
+    document.getElementById('pdSaldo').textContent      = '$' + saldo.toLocaleString('es-CO');
+    document.getElementById('pdMovimientos').textContent = movimientosActivos.length;
+
+    // Cambiar color del saldo si es negativo
+    const elSaldo = document.getElementById('pdSaldo');
+    elSaldo.className = saldo >= 0 ? 'stat-value azul' : 'stat-value rojo';
+
+    // Filtrar para la tabla (por mes y tipo)
+    let filtrados = movimientosActivos.filter(m => m.fecha >= inicio && m.fecha <= fin);
+    if (tipo) filtrados = filtrados.filter(m => m.tipo === tipo);
+
+    renderMovimientos(filtrados);
+    graficasPerfilTorta(totalIngresos, totalGastos);
+    graficasPerfilLinea();
+}
+
+function filtrarMovimientos() { cargarMovimientos(); }
+
+function renderMovimientos(lista) {
+    const tbody = document.getElementById('tablaMovimientos');
+    if (!lista.length) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text2)">Sin movimientos en este período</td></tr>';
+        return;
+    }
+    tbody.innerHTML = lista.map(m => {
+        const esIngreso = m.tipo === 'ingreso';
+        return `<tr>
+            <td style="font-size:12px">${formatFecha(m.fecha)}</td>
+            <td style="font-weight:500">${m.concepto}</td>
+            <td><span style="font-size:11px;padding:2px 8px;border-radius:20px;background:var(--bg3);color:var(--text2)">${m.categoria}</span></td>
+            <td><span class="badge ${esIngreso ? 'badge-pagado' : 'badge-mora'}">${esIngreso ? '↑ Ingreso' : '↓ Gasto'}</span></td>
+            <td style="font-weight:700;font-size:14px;color:${esIngreso ? 'var(--verde)' : 'var(--rojo)'}">
+                ${esIngreso ? '+' : '-'}$${Number(m.valor || 0).toLocaleString('es-CO')}
+            </td>
+            <td style="font-size:12px;color:var(--text2)">${m.descripcion || '—'}</td>
+            <td>
+                <button class="btn-accion borrar" onclick="eliminarMovimiento(${m.id})">✕</button>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+// ── Gráfica donut saldo ─────────────────────────
+function graficasPerfilTorta(ingresos, gastos) {
+    const ctx = document.getElementById('chartPerfilTorta')?.getContext('2d');
+    if (!ctx) return;
+    if (chartPerfilTorta) chartPerfilTorta.destroy();
+    chartPerfilTorta = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Ingresos', 'Gastos'],
+            datasets: [{
+                data: [ingresos || 0.01, gastos || 0.01],
+                backgroundColor: ['#10b981', '#ef4444'],
+                borderColor: ['#0f172a', '#0f172a'],
+                borderWidth: 3
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: true,
+            plugins: {
+                legend: { labels: { color: '#e8edf5', font: { family: 'DM Sans' } } },
+                tooltip: {
+                    callbacks: { label: ctx => ' $' + Number(ctx.raw).toLocaleString('es-CO') }
+                }
+            }
+        }
+    });
+}
+
+// ── Gráfica línea ingresos vs gastos 6 meses ────
+function graficasPerfilLinea() {
+    const ctx = document.getElementById('chartPerfilLinea')?.getContext('2d');
+    if (!ctx) return;
+    if (chartPerfilLinea) chartPerfilLinea.destroy();
+
+    // Agrupar por mes
+    const hoy     = new Date();
+    const meses   = [];
+    const ingMes  = [];
+    const gastMes = [];
+
+    for (let i = 5; i >= 0; i--) {
+        const d     = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
+        const key   = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        const label = d.toLocaleDateString('es-CO', { month: 'short', year: '2-digit' });
+        meses.push(label);
+
+        const movsMes = movimientosActivos.filter(m => m.fecha?.startsWith(key));
+        ingMes.push(movsMes.filter(m => m.tipo === 'ingreso').reduce((s, m) => s + Number(m.valor || 0), 0));
+        gastMes.push(movsMes.filter(m => m.tipo === 'gasto').reduce((s, m) => s + Number(m.valor || 0), 0));
+    }
+
+    chartPerfilLinea = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: meses,
+            datasets: [
+                {
+                    label: 'Ingresos',
+                    data: ingMes,
+                    backgroundColor: 'rgba(16,185,129,0.7)',
+                    borderRadius: 5
+                },
+                {
+                    label: 'Gastos',
+                    data: gastMes,
+                    backgroundColor: 'rgba(239,68,68,0.7)',
+                    borderRadius: 5
+                }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: true,
+            plugins: {
+                legend: { labels: { color: '#e8edf5', font: { family: 'DM Sans' } } },
+                tooltip: {
+                    callbacks: { label: ctx => ' $' + Number(ctx.raw).toLocaleString('es-CO') }
+                }
+            },
+            scales: {
+                x: { ticks: { color: '#7a8ba0' }, grid: { color: '#1e2d45' } },
+                y: {
+                    ticks: { color: '#7a8ba0', callback: v => '$' + Number(v).toLocaleString('es-CO') },
+                    grid: { color: '#1e2d45' }
+                }
+            }
+        }
+    });
+}
+
+// ── CRUD Perfiles ───────────────────────────────
+function abrirModalPerfil(id) {
+    document.getElementById('perfilId').value          = '';
+    document.getElementById('perfilNombre').value      = '';
+    document.getElementById('perfilCargo').value       = '';
+    document.getElementById('perfilTelefono').value    = '';
+    document.getElementById('perfilSaldoInicial').value= '0';
+    document.getElementById('perfilColor').value       = '#3b82f6';
+    document.getElementById('tituloPerfil').textContent= 'Nuevo Perfil';
+    // Reset color picker
+    document.querySelectorAll('.color-dot').forEach(d => {
+        d.textContent = d.dataset.color === '#3b82f6' ? '✓' : '';
+        d.classList.toggle('activo', d.dataset.color === '#3b82f6');
+    });
+    if (id) {
+        const p = todosPerfiles.find(x => x.id === id);
+        if (p) {
+            document.getElementById('perfilId').value          = p.id;
+            document.getElementById('perfilNombre').value      = p.nombre || '';
+            document.getElementById('perfilCargo').value       = p.cargo  || '';
+            document.getElementById('perfilTelefono').value    = p.telefono || '';
+            document.getElementById('perfilSaldoInicial').value= p.saldo_inicial || 0;
+            document.getElementById('perfilColor').value       = p.color || '#3b82f6';
+            document.getElementById('tituloPerfil').textContent= 'Editar Perfil';
+            document.querySelectorAll('.color-dot').forEach(d => {
+                d.textContent = d.dataset.color === p.color ? '✓' : '';
+                d.classList.toggle('activo', d.dataset.color === p.color);
+            });
+        }
+    }
+    document.getElementById('modalPerfil').classList.remove('oculto');
+}
+
+function editarPerfil(id) { abrirModalPerfil(id); }
+
+function cerrarModalPerfil() {
+    document.getElementById('modalPerfil').classList.add('oculto');
+}
+
+function elegirColor(el) {
+    document.querySelectorAll('.color-dot').forEach(d => { d.textContent = ''; d.classList.remove('activo'); });
+    el.textContent = '✓';
+    el.classList.add('activo');
+    document.getElementById('perfilColor').value = el.dataset.color;
+}
+
+async function guardarPerfil() {
+    const id     = document.getElementById('perfilId').value;
+    const datos  = {
+        nombre:        document.getElementById('perfilNombre').value.trim(),
+        cargo:         document.getElementById('perfilCargo').value.trim(),
+        telefono:      document.getElementById('perfilTelefono').value.trim(),
+        saldo_inicial: parseFloat(document.getElementById('perfilSaldoInicial').value) || 0,
+        color:         document.getElementById('perfilColor').value,
+        activo:        true
+    };
+    if (!datos.nombre) { toast('El nombre es obligatorio', 'error'); return; }
+    let error;
+    if (id) { ({ error } = await client.from('perfiles').update(datos).eq('id', id)); }
+    else    { ({ error } = await client.from('perfiles').insert([datos])); }
+    if (error) { toast('Error guardando perfil', 'error'); console.error(error); return; }
+    toast(id ? 'Perfil actualizado ✓' : 'Perfil creado ✓', 'exito');
+    cerrarModalPerfil();
+    cargarPerfiles();
+}
+
+async function eliminarPerfil(id) {
+    const p = todosPerfiles.find(x => x.id === id);
+    if (!confirm(`¿Eliminar el perfil de "${p?.nombre}" y todos sus movimientos?`)) return;
+    const { error } = await client.from('perfiles').delete().eq('id', id);
+    if (error) { toast('Error eliminando', 'error'); return; }
+    if (perfilActivo?.id === id) {
+        perfilActivo = null;
+        document.getElementById('perfilDetalle').classList.add('oculto');
+    }
+    toast('Perfil eliminado', 'exito');
+    cargarPerfiles();
+}
+
+// ── Movimientos ─────────────────────────────────
+function setTipoMov(tipo) {
+    movTipoActual = tipo;
+    document.getElementById('btnTipoIngreso').classList.toggle('activo', tipo === 'ingreso');
+    document.getElementById('btnTipoGasto').classList.toggle('activo',   tipo === 'gasto');
+    document.getElementById('btnGuardarMov').textContent = tipo === 'ingreso' ? 'Guardar Ingreso' : 'Guardar Gasto';
+}
+
+function abrirModalMovimiento() {
+    if (!perfilActivo) { toast('Selecciona un perfil primero', 'error'); return; }
+    document.getElementById('movConcepto').value  = '';
+    document.getElementById('movValor').value     = '';
+    document.getElementById('movDesc').value      = '';
+    document.getElementById('movFecha').value     = new Date().toISOString().split('T')[0];
+    document.getElementById('movCategoria').value = 'cobro';
+    setTipoMov('ingreso');
+    document.getElementById('modalMovimiento').classList.remove('oculto');
+}
+
+function cerrarModalMovimiento() {
+    document.getElementById('modalMovimiento').classList.add('oculto');
+}
+
+async function guardarMovimiento() {
+    const concepto = document.getElementById('movConcepto').value.trim();
+    const valor    = parseFloat(document.getElementById('movValor').value) || 0;
+    const fecha    = document.getElementById('movFecha').value;
+    const categoria= document.getElementById('movCategoria').value;
+    const descripcion = document.getElementById('movDesc').value.trim();
+
+    if (!concepto) { toast('Ingresa un concepto', 'error'); return; }
+    if (!valor)    { toast('Ingresa un valor mayor a 0', 'error'); return; }
+    if (!fecha)    { toast('Ingresa la fecha', 'error'); return; }
+
+    const { error } = await client.from('movimientos').insert([{
+        perfil_id: perfilActivo.id,
+        tipo:      movTipoActual,
+        concepto, categoria, valor, fecha, descripcion,
+        origen:   'manual'
+    }]);
+
+    if (error) { toast('Error guardando movimiento', 'error'); console.error(error); return; }
+    toast(`${movTipoActual === 'ingreso' ? 'Ingreso' : 'Gasto'} registrado ✓`, 'exito');
+    cerrarModalMovimiento();
+    await cargarMovimientos();
+    cargarPerfiles(); // actualizar saldos en tarjetas
+    // Actualizar balance global si está abierto
+    if (!document.getElementById('sec-balance').classList.contains('oculto')) cargarBalance();
+}
+
+async function eliminarMovimiento(id) {
+    if (!confirm('¿Eliminar este movimiento?')) return;
+    const { error } = await client.from('movimientos').delete().eq('id', id);
+    if (error) { toast('Error eliminando', 'error'); return; }
+    toast('Movimiento eliminado', 'exito');
+    await cargarMovimientos();
+    cargarPerfiles();
 }
